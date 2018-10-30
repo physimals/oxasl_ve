@@ -126,12 +126,12 @@ def _decode_infer(wsp):
         autogen_mask(wsp)
 
     # Run VEASLC
-    flow, prob, extras, log = veaslc_wrapper(wsp, wsp.asldata.data, wsp.infer_mask.data)
+    flow, prob, extras, log = veaslc_wrapper(wsp, wsp.asldata, wsp.infer_mask)
     wsp.set_item("veasl_log", log, save_fn=str)
-    wsp.flow = Image(flow, header=wsp.asldata.header)
-    wsp.prob = Image(prob, header=wsp.asldata.header)
-    wsp.pis = extras["veasl_pis"]
-    wsp.veslocs = np.array([extras["veasl_x"], extras["veasl_y"]])
+    wsp.flow = flow
+    wsp.prob = prob
+    wsp.pis = extras["pis"]
+    wsp.veslocs = np.array([extras["x"], extras["y"]])
     wsp.log.write("   - Vessel locations:\n")
     wsp.log.write("     X: %s\n" % wsp.veslocs[0, :])
     wsp.log.write("     Y: %s\n" % wsp.veslocs[1, :])

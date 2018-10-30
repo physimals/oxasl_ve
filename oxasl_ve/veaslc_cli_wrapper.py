@@ -1,13 +1,16 @@
+from fsl.wrappers import LOAD
 from oxasl_ve.wrappers import veaslc
 
 def veaslc_wrapper(wsp, data, roi):
     """
     """
     # Run the C code
-    log = veaslc(data, roi, 
+    print(data)
+    print(roi)
+    ret = veaslc(data, roi, out=LOAD,
                  method=wsp.ifnone("veasl_method", "map"),
                  veslocs=wsp.veslocs, 
-                 imlist=wsp.imlist, 
+                 imlist="T0123456", # FIXME
                  encdef=wsp.enc_mac,
                  modmat=wsp.modmat, 
                  nfpc=wsp.nfpc, 
@@ -22,4 +25,5 @@ def veaslc_wrapper(wsp, data, roi):
                  sampleevery=wsp.ifnone("sample_every", 1), 
                  debug=wsp.ifnone("debug", False))
 
-    return ret_flow, ret_prob, extras, log.decode("UTF-8")
+    print(ret)
+    return ret["out/flow"], ret["out/vessel_prob"], {"pis" : ret["out/pis"], "x" : ret["out/x"], "y" : ret["out/y"]}, ""

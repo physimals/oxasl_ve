@@ -16,6 +16,7 @@ from oxasl.options import OptionCategory, IgnorableOptionGroup
 
 from ._version import __version__
 from .veaslc_cli_wrapper import veaslc_wrapper
+from .modmat_default import modmat_default
 
 def veslocs_to_enc(veslocs, nvols=8):
     """
@@ -170,7 +171,7 @@ def _decode(wsp):
 
     # Modulation matrix
     if wsp.modmat is None:
-        wsp.veasl.modmat = "modmat_default"
+        wsp.veasl.modmat = modmat_default
 
     # Make sure encoding cycles are together in the data and 
     # average over repeats if required FIXME is this wise/required?

@@ -6,9 +6,10 @@ import fsl.utils.assertions as asrt
 from fsl.wrappers import wrapperutils  as wutils
 
 @wutils.fileOrImage('data', 'roi', outprefix='out')
-@wutils.fileOrArray('veslocs', 'encdef')
+@wutils.fileOrArray('veslocs', 'encdef', 'modmat')
+@wutils.fileOrText(' ')
 @wutils.fslwrapper
-def veaslc(data, roi, veslocs, encdef, imlist, modmat, out="veaslc", method="map", **kwargs):
+def veaslc(data, roi, veslocs, encdef, imlist, modmat, out="veaslc", **kwargs):
     """
     Wrapper for the ``veaslc`` command.
     
@@ -27,9 +28,8 @@ def veaslc(data, roi, veslocs, encdef, imlist, modmat, out="veaslc", method="map
     cmd = ['veasl', '--data=%s' % data, '--mask=%s' % roi, '--enc-setup=%s' % encdef, 
            '--imlist=%s' % imlist, '--vessels=%s' % veslocs, '--modmat=%s' % modmat,
            '--out=%s' % out]
-    if method == "map":
+    if kwargs.pop("method", "map") == "map":
         cmd.append('--map')
 
     cmd += wutils.applyArgStyle('--=', valmap=valmap, singlechar_args=True, **kwargs)
-    print(" ".join(cmd))
     return cmd

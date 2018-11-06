@@ -9,6 +9,6 @@ The relevant processing function can also be called independently
 on a ``Workspace`` object, however this will not include the
 standard oxasl preprocessing or registration.
 """
-from .api import model_ve, VeaslOptions
+from .api import model_ve, VeaslOptions, two_to_mac, mac_to_two, veslocs_to_enc, generate_mask
 
-__all__ = ["model_ve", "VeaslOptions"]
+__all__ = ["model_ve", "VeaslOptions", "two_to_mac", "mac_to_two", "veslocs_to_enc", "generate_mask"]

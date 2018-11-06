@@ -86,6 +86,7 @@ def two_to_mac(two):
 
     cx = conline * np.sin(thtsp)
     cy = conline * np.cos(thtsp)
+    print("two2mac: ", conline[4:], np.sin(thtsp[4:]), np.cos(thtsp[4:]), cx[4:], cy[4:])
 
     # reverse cycles
     # these are cycles where the tagging of vessels is reversed, Tom does this
@@ -106,17 +107,89 @@ def two_to_mac(two):
     mac = [cx, cy, th, D]
     return np.array(mac, dtype=np.float), imlist
 
-def autogen_mask(wsp):
+def mac_to_two(mac):
+    """ 
+    Convert MAC format encoding into TWO format
+
+    This is an inverse of two_to_mac done with remarkably little understanding.
+    It seems to assume that 'reverse cycles' occur in odd numbered images which 
+    seems unreasonable, but I can't see an obvious way to detect this otherwise
+    """
+    # MAC format does not explicitly describe the tag/control images
+    nenc = mac.shape[1] + 2
+
+    th = np.zeros(nenc)
+    th_mac = np.zeros(nenc)
+    va = np.zeros(nenc)
+    vb = np.zeros(nenc)
+    cx = np.zeros(nenc)
+    cy = np.zeros(nenc)
+    d = np.zeros(nenc)
+    imlist = np.arange(nenc) - 1
+    imtype = np.arange(nenc)
+    imtype[imtype > 1] = (imtype[imtype > 1] % 2) + 2
+
+    cx[2:] = mac[0, :]
+    cy[2:] = mac[1, :]
+    d[2:] = mac[3, :]
+    th[2:] = mac[2, :]
+    th_mac[2:] = mac[2, :]
+
+    # Angles
+    #
+    # MAC uses 180 rotation to indicate reversal of modulation function, thus it
+    # is important which of vA or Vb is lower, as for TWO this would reverse
+    # the modulation function
+    # TWO measures angle from AP anti-clock, MAC from LR clock
+    rev_mod = th > 180
+    th[rev_mod] = th[rev_mod] - 180
+    th[2:] = -th[2:] + 90
+
+    # Scales and centres
+    for idx in range(nenc):
+        if idx > 1:
+            s = np.sin(th[idx] * 3.14159265 / 180)
+            c = np.cos(th[idx] * 3.14159265 / 180)
+            print(idx, s, c, cx[idx] / s, cy[idx] / c, d[idx])
+            if np.abs(s) > np.abs(c):
+                vb[idx] = cx[idx] / s + d[idx]
+                va[idx] = cx[idx] / s - d[idx]
+            else:
+                vb[idx] = cy[idx] / c + d[idx]
+                va[idx] = cy[idx] / c - d[idx]
+
+        if idx > 1 and idx % 2 == 1:
+            vb[idx] = vb[idx] - 2*d[idx]
+            va[idx] = va[idx] - 2*d[idx]
+    
+        if th_mac[idx] > 180:
+            va[idx], vb[idx] = vb[idx], va[idx]
+
+    two = np.column_stack((th, imtype, va, vb))
+    return two, imlist
+
+def generate_mask(data, imlist, frac=0.5):
     """
     Auto-generate the mask used for inference of vessel positions/proportions by VEASL
 
     Note that this is *not* the mask used to output the flows etc
+
+    :param data: ASL data as Numpy array
+    :param imlist: Image definition list
+    :param frac: Percentile fraction to use
+
+    :return: Numpy integer array defining inference mask
     """
-    imlist = list(wsp.imlist) # Might by np.ndarray
+    print(data.shape, imlist, frac)
+    imlist = list(imlist) # Might by np.ndarray
     tag_idx, ctl_idx = imlist.index(-1), imlist.index(0)
-    diffdata = np.abs(wsp.asldata.data[..., tag_idx] - wsp.asldata.data[..., ctl_idx])
-    thresh = np.percentile(diffdata, 99) * (1-wsp.ifnone("infer_mask_frac", 0.5))
-    wsp.infer_mask = Image((diffdata > thresh).astype(np.int), header=wsp.asldata.header)
+    diffdata = np.abs(data[..., tag_idx] - data[..., ctl_idx])
+    thresh = np.percentile(diffdata, 99) * (1-frac)
+    return (diffdata > thresh).astype(np.int)
+
+def _autogen_mask(wsp):
+    maskdata = generate_mask(wsp.asldata.data, wsp.imlist, wsp.ifnone("infer_mask_frac", 0.5))
+    wsp.infer_mask = Image(maskdata, header=wsp.asldata.header)
 
 def _decode_infer(wsp):
     """
@@ -124,7 +197,7 @@ def _decode_infer(wsp):
     """
     # Generate mask for inference
     if wsp.infer_mask is None:
-        autogen_mask(wsp)
+        _autogen_mask(wsp)
 
     # Run VEASLC
     flow, prob, extras, log = veaslc_wrapper(wsp, wsp.asldata, wsp.infer_mask)
@@ -140,8 +213,6 @@ def _decode_infer(wsp):
     wsp.log.write("     %s\n" % wsp.pis)
 
 def _decode(wsp):
-
-
     if wsp.veasl is None:
         wsp.sub("veasl")
 
@@ -152,21 +223,23 @@ def _decode(wsp):
     num_vessels = wsp.veslocs.shape[1]
 
     if wsp.encdef is not None:
-        # Encoding definition supplied by user. 
-        #
-        # Image definition list describes the series of encoded volumes
-        # normally the default is fine
+        # Encoding definition supplied by user - assumed to be in MAC format. 
         wsp.veasl.enc_mac = wsp.encdef
+        wsp.veasl.enc_two, imlist = mac_to_two(wsp.veasl.enc_mac)
 
+        # imlist describes the series of encoded volumes - normally the default is fine
         if wsp.imlist is None:
-            wsp.veasl.imlist = [-1, ] + range(wsp.asldata.ntc-1)
+            wsp.veasl.imlist = imlist
     else:
         # Auto-generate encoding definition from the initial vessel locations
         wsp.veasl.enc_two = veslocs_to_enc(wsp.veslocs, wsp.asldata.ntc)
         wsp.veasl.enc_mac, wsp.veasl.imlist = two_to_mac(wsp.veasl.enc_two)
     
-    wsp.log.write("\n - Encoding matrix:\n")
+    wsp.log.write("\n - Encoding matrix:\nTWO\n")
     for row in wsp.veasl.enc_two:
+        wsp.log.write("   %s\n" % ", ".join([str(v) for v in row]))
+    wsp.log.write("MAC:\n")
+    for row in wsp.veasl.enc_mac:
         wsp.log.write("   %s\n" % ", ".join([str(v) for v in row]))
 
     # Modulation matrix
@@ -192,7 +265,7 @@ def _decode(wsp):
         _decode_infer(wsp_init)
         wsp.veasl.veslocs_orig = wsp.veasl.veslocs
         wsp.veasl.veslocs = wsp_init.veslocs
-        wsp.veasl.infer_loc = wsp.infer_loc_pld
+        wsp.veasl.infer_loc = wsp.ifnone("infer_loc_pld", "none")
 
     # Do vessel decoding on each TI/PLD with fixed vessel locations
     for idx in range(wsp.asldata.ntis):

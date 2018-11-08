@@ -274,6 +274,9 @@ def _decode(wsp):
         wsp_ti.asldata = wsp.veasl.asldata_mar.single_ti(idx)
         _decode_infer(wsp_ti)
         wsp_ti.uncache()
+        if wsp.asldata.ntis == 1:
+            wsp.veasl.veslocs_orig = wsp.veasl.veslocs
+            wsp.veasl.veslocs = wsp_ti.veslocs
 
     wsp.log.write("\nDONE vessel decoding\n")
     return num_vessels

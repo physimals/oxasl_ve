@@ -86,7 +86,6 @@ def two_to_mac(two):
 
     cx = conline * np.sin(thtsp)
     cy = conline * np.cos(thtsp)
-    print("two2mac: ", conline[4:], np.sin(thtsp[4:]), np.cos(thtsp[4:]), cx[4:], cy[4:])
 
     # reverse cycles
     # these are cycles where the tagging of vessels is reversed, Tom does this
@@ -150,7 +149,6 @@ def mac_to_two(mac):
         if idx > 1:
             s = np.sin(th[idx] * 3.14159265 / 180)
             c = np.cos(th[idx] * 3.14159265 / 180)
-            print(idx, s, c, cx[idx] / s, cy[idx] / c, d[idx])
             if np.abs(s) > np.abs(c):
                 vb[idx] = cx[idx] / s + d[idx]
                 va[idx] = cx[idx] / s - d[idx]
@@ -180,7 +178,6 @@ def generate_mask(data, imlist, frac=0.5):
 
     :return: Numpy integer array defining inference mask
     """
-    print(data.shape, imlist, frac)
     imlist = list(imlist) # Might by np.ndarray
     tag_idx, ctl_idx = imlist.index(-1), imlist.index(0)
     diffdata = np.abs(data[..., tag_idx] - data[..., ctl_idx])

@@ -1,0 +1,7 @@
+.vscode
+*.mat
+*.pyc
+build*
+oxasl_ve/_version.py
+dist
+oxasl_ve.egg-info/

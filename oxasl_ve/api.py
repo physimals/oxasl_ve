@@ -270,7 +270,6 @@ def _decode(wsp):
         wsp_ti = wsp.veasl.sub("pld%i" % (idx+1))
         wsp_ti.asldata = wsp.veasl.asldata_mar.single_ti(idx)
         _decode_infer(wsp_ti)
-        wsp_ti.uncache()
         if wsp.asldata.ntis == 1:
             wsp.veasl.veslocs_orig = wsp.veasl.veslocs
             wsp.veasl.veslocs = wsp_ti.veslocs
@@ -298,12 +297,11 @@ def _model_vessels(wsp, num_vessels):
         vessel_data = np.zeros(list(wsp.asldata.shape[:3]) + [wsp.asldata.ntis,])
         for ti_idx in range(wsp.asldata.ntis):
             flow = getattr(wsp.veasl, "pld%i" % (ti_idx+1)).flow
-            vessel_data[..., ti_idx] = flow.data[..., vessel] / 2
+            vessel_data[..., ti_idx] = flow.data[..., vessel] * 2
         vessel_img = wsp.veasl.asldata_mar.derived(vessel_data, iaf="diff", order="rt")
         wsp_ves.asldata = vessel_img
         basil.basil(wsp_ves, wsp_ves)
         oxford_asl.output_native(wsp.output.sub("vessel%i" % (vessel+1)), wsp_ves)
-        wsp_ves.uncache()
 
 def _combine_vessels(wsp, num_vessels):
     wsp.log.write("\nGenerating combined images for all vessels\n\n")

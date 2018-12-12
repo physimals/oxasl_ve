@@ -13,6 +13,7 @@ from fsl.data.image import Image
 
 from oxasl import basil
 from oxasl.options import OptionCategory, IgnorableOptionGroup
+from oxasl.reporting import Report
 
 from ._version import __version__
 from .veaslc_cli_wrapper import veaslc_wrapper
@@ -282,7 +283,7 @@ def _model_vessels(wsp, num_vessels):
     wsp.log.write("\nProcessing per-vessel decoded images\n\n")
     wsp.sub("output")
 
-    # Generate per-vessel subtracted images. Note that we divide the flow by 2. Why?
+    # Generate per-vessel subtracted images. Note that we multiply the flow by 2. Why?
     #
     # "for a standard ASL sequence, in the label condition we measure S - B (where S is 
     #  static tissue and B is blood signal) and in the control condition we measure S + B, 
@@ -301,9 +302,13 @@ def _model_vessels(wsp, num_vessels):
         vessel_img = wsp.veasl.asldata_mar.derived(vessel_data, iaf="diff", order="rt")
         wsp_ves.asldata = vessel_img
         basil.basil(wsp_ves, wsp_ves)
-        oxford_asl.output_native(wsp.output.sub("vessel%i" % (vessel+1)), wsp_ves)
+        subname = "vessel%i" % (vessel+1)
+        report = Report("Output for vessel %i" % (vessel+1))
+        oxford_asl.output_native(wsp.output.sub(subname), wsp_ves, report=report)
+        wsp.report.add(subname, report)
 
 def _combine_vessels(wsp, num_vessels):
+    from oxasl import oxford_asl
     wsp.log.write("\nGenerating combined images for all vessels\n\n")
 
     # Generate combined perfusion and aCBV maps over all vessels
@@ -352,6 +357,10 @@ def _combine_vessels(wsp, num_vessels):
         else:
             raise ValueError("Unrecognized combination method for single-vessel arrival time: %s" % combine_method)
         wsp.output.all_vessels.native.arrival = Image(all_vessel_arrival, header=wsp.asldata.header)
+        
+        report = Report("Combined output for all vessels")
+        oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
+        wsp.report.add("all_vessels", report)
 
 def model_ve(wsp):
     """

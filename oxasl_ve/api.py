@@ -204,9 +204,12 @@ def _decode_infer(wsp):
     wsp.prob = prob
     wsp.pis = extras["pis"]
     wsp.veslocs = np.array([extras["x"], extras["y"]])
-    wsp.log.write("   - Vessel locations:\n")
+    wsp.log.write("   - Vessel locations (inference: %s):\n" % wsp.infer_loc)
     wsp.log.write("     X: %s\n" % wsp.veslocs[0, :])
     wsp.log.write("     Y: %s\n" % wsp.veslocs[1, :])
+    if wsp.infer_loc == "rigid":
+        tx, ty, rot = tuple(extras["trans"])
+        wsp.log.write("     Translation: %.3g, %.3g  Rotation: %.3g (degrees)\n" % (tx, ty, rot * 180 / math.pi))
     wsp.log.write("   - Class proportions:\n")
     wsp.log.write("     %s\n" % wsp.pis)
 
@@ -248,7 +251,7 @@ def _decode(wsp):
     # average over repeats if required FIXME is this wise/required?
     wsp.veasl.asldata_mar = wsp.asldata.mean_across_repeats(diff=False).reorder(out_order="lrt")
    
-    wsp.veasl.infer_loc = wsp.infer_loc_initial
+    wsp.veasl.infer_loc = wsp.ifnone("infer_loc", "rigid")
     if wsp.init_loc and wsp.asldata.ntis > 1:
         wsp.log.write("\n - Doing initial fit for vessel locations using mean data\n")
         asldata_mean = np.zeros(list(wsp.veasl.asldata_mar.data.shape[:3]) + [wsp.asldata.ntc], dtype=np.float)
@@ -314,53 +317,57 @@ def _combine_vessels(wsp, num_vessels):
     # Generate combined perfusion and aCBV maps over all vessels
     wsp.output.sub("all_vessels")
     wsp.output.all_vessels.sub("native")
-    for output in ("perfusion", "perfusion_calib", "aCBV", "aCBV_calib", "modelfit"):
-        have_output = False
-        all_vessel_img = None
+    for otype in ("", "_calib", "_std", "_var", "_std_calib", "_var_calib"):
+        for oname in ("perfusion", "aCBV", "modelfit"):
+            output = "%s%s" % (oname, otype)
+            have_output = False
+            all_vessel_img = None
+            for vessel in range(num_vessels):
+                vessel_wsp = getattr(wsp.output, "vessel%i" % (vessel+1))
+                vessel_img = getattr(vessel_wsp.native, output, None)
+                if vessel_img is not None:
+                    if all_vessel_img is None:
+                        all_vessel_img = np.zeros(vessel_img.shape, dtype=np.float)
+                    all_vessel_img += vessel_img.data
+                    have_output = True
+            if have_output:
+                setattr(wsp.output.all_vessels.native, output, Image(all_vessel_img, header=wsp.asldata.header))
+
+        # Generate combined arrival map
+        output = "arrival%s" % otype
+        vessel_perf = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
+        vessel_arrival = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
+        have_arrival = False
         for vessel in range(num_vessels):
             vessel_wsp = getattr(wsp.output, "vessel%i" % (vessel+1))
             vessel_img = getattr(vessel_wsp.native, output, None)
             if vessel_img is not None:
-                if all_vessel_img is None:
-                    all_vessel_img = np.zeros(vessel_img.shape, dtype=np.float)
-                all_vessel_img += vessel_img.data
-                have_output = True
-        if have_output:
-            setattr(wsp.output.all_vessels.native, output, Image(all_vessel_img, header=wsp.asldata.header))
+                vessel_perf[..., vessel] = vessel_wsp.native.perfusion.data
+                vessel_arrival[..., vessel] = vessel_img.data
+                have_arrival = True
 
-    # Generate combined arrival map
-    vessel_perf = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
-    vessel_arrival = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
-    have_arrival = False
-    for vessel in range(num_vessels):
-        vessel_wsp = getattr(wsp.output, "vessel%i" % (vessel+1))
-        if vessel_wsp.native.arrival is not None:
-            vessel_perf[..., vessel] = vessel_wsp.native.perfusion.data
-            vessel_arrival[..., vessel] = vessel_wsp.native.arrival.data
-            have_arrival = True
-
-    if have_arrival:
-        combine_method = wsp.ifnone("arrival_combine", "weightedperf")
-        if combine_method == "singleperf":
-            # This selects the arrival timme from a single vessel with highest perfusion
-            best_vessel = np.argmax(vessel_perf, -1)
-            shape3d, t = vessel_arrival.shape[:-1], vessel_arrival.shape[-1]
-            flat = vessel_arrival.reshape(-1, t)[np.arange(np.prod(shape3d)), best_vessel.ravel()]
-            all_vessel_arrival = flat.reshape(shape3d)
-            wsp.output.all_vessels.native.best_vessel = Image(best_vessel+1, header=wsp.asldata.header)
-        elif combine_method == "weightedperf":
-            # Tects the arrival time from a weighted average of vessels weighted by perfusion
-            all_vessel_arrival = np.nan_to_num(np.sum(vessel_perf * vessel_arrival, axis=-1) / wsp.output.all_vessels.native.perfusion.data)
-        #elif combine_method == "weightedprob":
-        #    # Sets the arrival time as a weighted average by vessel probability FIXME not working right now
-        #    all_vessel_arrival = np.sum(prob * vessel_arrival, axis=-1)
-        else:
-            raise ValueError("Unrecognized combination method for single-vessel arrival time: %s" % combine_method)
-        wsp.output.all_vessels.native.arrival = Image(all_vessel_arrival, header=wsp.asldata.header)
-        
-        report = Report("Combined output for all vessels")
-        oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
-        wsp.report.add("all_vessels", report)
+        if have_arrival:
+            combine_method = wsp.ifnone("arrival_combine", "weightedperf")
+            if combine_method == "singleperf":
+                # This selects the arrival timme from a single vessel with highest perfusion
+                best_vessel = np.argmax(vessel_perf, -1)
+                shape3d, t = vessel_arrival.shape[:-1], vessel_arrival.shape[-1]
+                flat = vessel_arrival.reshape(-1, t)[np.arange(np.prod(shape3d)), best_vessel.ravel()]
+                all_vessel_arrival = flat.reshape(shape3d)
+                wsp.output.all_vessels.native.best_vessel = Image(best_vessel+1, header=wsp.asldata.header)
+            elif combine_method == "weightedperf":
+                # Tects the arrival time from a weighted average of vessels weighted by perfusion
+                all_vessel_arrival = np.nan_to_num(np.sum(vessel_perf * vessel_arrival, axis=-1) / wsp.output.all_vessels.native.perfusion.data)
+            #elif combine_method == "weightedprob":
+            #    # Sets the arrival time as a weighted average by vessel probability FIXME not working right now
+            #    all_vessel_arrival = np.sum(prob * vessel_arrival, axis=-1)
+            else:
+                raise ValueError("Unrecognized combination method for single-vessel arrival time: %s" % combine_method)
+            setattr(wsp.output.all_vessels.native, output, Image(all_vessel_arrival, header=wsp.asldata.header))
+            
+            report = Report("Combined output for all vessels")
+            oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
+            wsp.report.add("all_vessels", report)
 
 def model_ve(wsp):
     """
@@ -431,16 +438,16 @@ class VeaslOptions(OptionCategory):
         g = IgnorableOptionGroup(parser, "VEASL Options")
         g.add_option("--veslocs", help="Vessel locations file", type="matrix")
         g.add_option("--nfpc", help="Number of flows per class", type="int", default=2)
-        g.add_option("--infer-loc-initial", help="Location inference to use for initial fitting", choices=["none", "xy", "rigid", "affine"], default="rigid")
-        g.add_option("--infer-loc-pld", help="Location inference to use for individual PLD fitting. Ignored if not multi-PLD", choices=["none", "xy", "rigid", "affine"], default="none")
         g.add_option("--veasl-method", help="VEASL inference method", choices=["map", "mcmc"], default="map")
         g.add_option("--infer-v", help="Infer flow velocity", action="store_true", default=False)
+        g.add_option("--infer-loc", help="Vessel location inference method to use. For multi-pld data can also infer vessel locations individually using --infer-loc-pld", choices=["none", "xy", "rigid", "affine"], default="rigid")
+        g.add_option("--init-loc", help="For multi-PLD data, initialise vessel locations by fitting with mean data", action="store_true", default=False)
+        g.add_option("--infer-loc-pld", help="For multi-PLD data when --init-loc is specified, this specifies an optional additional vessel location inference method during individual PLD fitting.", choices=["none", "xy", "rigid", "affine"], default="none")
         g.add_option("--xy-std", help="Prior standard deviation for vessel positions", type="float", default=1.0)
         g.add_option("--rot-std", help="Prior standard deviation for rotation angle (degrees) if using rigid body inference", type="float", default=1.2)
         g.add_option("--v-mean", help="Prior mean flow velocity if using --infer-v", type="float", default=0.3)
         g.add_option("--v-std", help="Prior standard deviation for flow velocity if using --infer-v", type="float", default=0.01)
         g.add_option("--infer-mask-frac", help="Fraction of 99th percentile to use when generating inference mask", type="float", default=0.5)
-        g.add_option("--init-loc", help="Initialise vessel locations by fitting with mean data", action="store_true", default=False)
         g.add_option("--modmat", help="Modulation matrix file")
         g.add_option("--arrival-combine", help="Method for combining arrival time maps", choices=["weightedperf", "singleperf"], default="weightedperf")
         ret.append(g)

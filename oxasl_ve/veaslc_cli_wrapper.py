@@ -24,4 +24,13 @@ def veaslc_wrapper(wsp, data, roi):
                  debug=wsp.ifnone("debug", False),
                  log=wsp.fsllog)
 
-    return ret["out/flow"], ret["out/vessel_prob"], {"pis" : ret["out/pis"], "x" : ret["out/x"], "y" : ret["out/y"]}, ret["out/logfile"]
+    flow = ret["out/flow"]
+    prob = ret["out/vessel_prob"]
+    extras = {
+        "pis" : ret["out/pis"], 
+        "x" : ret["out/x"], 
+        "y" : ret["out/y"],
+        "trans" : ret.get("out/trans", None),
+    }
+    log = ret["out/logfile"]
+    return flow, prob, extras, log

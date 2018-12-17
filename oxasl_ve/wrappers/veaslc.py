@@ -11,7 +11,7 @@ from fsl.wrappers import wrapperutils  as wutils
 @wutils.fslwrapper
 def veaslc(data, roi, veslocs, encdef, imlist, modmat, out="veaslc", **kwargs):
     """
-    Wrapper for the ``veaslc`` command.
+    Wrapper for the ``veasl`` command.
     
     Required options:
     

@@ -319,9 +319,10 @@ def _combine_vessels(wsp, num_vessels):
     wsp.output.all_vessels.sub("native")
     for otype in ("", "_calib", "_std", "_var", "_std_calib", "_var_calib"):
         # Generate combined arrival maps for most outputs by summing the single
-        # vessel outputs. Note that we need a special case for variance where
-        # we need to sum the std and then square the result
-        is_variance = otype.startswith("_var")
+        # vessel outputs. Note that we can sum the variance because the variables
+        # are Gaussian, but not the standard deviation where we need to sum the
+        # squares and then take the square root
+        is_std = otype.startswith("_std")
         for oname in ("perfusion", "aCBV", "modelfit"):
             output = "%s%s" % (oname, otype)
             have_output = False
@@ -332,14 +333,14 @@ def _combine_vessels(wsp, num_vessels):
                 if vessel_img is not None:
                     if all_vessel_img is None:
                         all_vessel_img = np.zeros(vessel_img.shape, dtype=np.float)
-                    if is_variance:
-                        all_vessel_img += np.sqrt(vessel_img.data)
+                    if is_std:
+                        all_vessel_img += np.square(vessel_img.data)
                     else:
                         all_vessel_img += vessel_img.data
                     have_output = True
             if have_output:
-                if is_variance:
-                    all_vessel_img = np.square(all_vessel_img)
+                if is_std:
+                    all_vessel_img = np.sqrt(all_vessel_img)
                 setattr(wsp.output.all_vessels.native, output, Image(all_vessel_img, header=wsp.asldata.header))
 
         # Generate combined arrival map which is more complex than a simple sum
@@ -367,11 +368,11 @@ def _combine_vessels(wsp, num_vessels):
             elif combine_method == "weightedperf":
                 # Tests the arrival time from a weighted average of vessels weighted by perfusion. Note that
                 # we need to account for variance as above
-                if is_variance:
-                    vessel_arrival = np.sqrt(vessel_arrival)
+                if is_std:
+                    vessel_arrival = np.square(vessel_arrival)
                 all_vessel_arrival = np.nan_to_num(np.sum(vessel_perf * vessel_arrival, axis=-1) / wsp.output.all_vessels.native.perfusion.data)
-                if is_variance:
-                    all_vessel_arrival = np.square(all_vessel_arrival)
+                if is_std:
+                    all_vessel_arrival = np.sqrt(all_vessel_arrival)
             #elif combine_method == "weightedprob":
             #    # Sets the arrival time as a weighted average by vessel probability FIXME not working right now
             #    all_vessel_arrival = np.sum(prob * vessel_arrival, axis=-1)

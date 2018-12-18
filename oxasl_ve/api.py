@@ -379,10 +379,10 @@ def _combine_vessels(wsp, num_vessels):
             else:
                 raise ValueError("Unrecognized combination method for single-vessel arrival time: %s" % combine_method)
             setattr(wsp.output.all_vessels.native, output, Image(all_vessel_arrival, header=wsp.asldata.header))
-            
-            report = Report("Combined output for all vessels")
-            oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
-            wsp.report.add("all_vessels", report)
+    
+    report = Report("Combined output for all vessels")
+    oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
+    wsp.report.add("all_vessels", report)
 
 def model_ve(wsp):
     """

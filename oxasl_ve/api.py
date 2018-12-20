@@ -310,7 +310,69 @@ def _model_vessels(wsp, num_vessels):
         oxford_asl.output_native(wsp.output.sub(subname), wsp_ves, report=report)
         wsp.report.add(subname, report)
 
+def _combine_vessels_sum(wsp, num_vessels, output):
+    """
+    Generate combined vessel output by summing the contributions
+    from individual vessels
+    
+    Used for perfusion data
+    """
+    have_output = False
+    all_vessel_img = None
+    for vessel in range(num_vessels):
+        vessel_wsp = getattr(wsp.output, "vessel%i" % (vessel+1))
+        vessel_img = getattr(vessel_wsp.native, output, None)
+        if vessel_img is not None:
+            if all_vessel_img is None:
+                all_vessel_img = np.zeros(vessel_img.shape, dtype=np.float)
+            all_vessel_img += vessel_img.data
+            have_output = True
+    if have_output:
+        setattr(wsp.output.all_vessels.native, output, Image(all_vessel_img, header=wsp.asldata.header))
+
+def _combine_vessels_weighted(wsp, num_vessels, output, method="weightedperf"):
+    """
+    Generate combined vessel output by summing the contributions
+    from individual vessels weighted by voxelwise perfusion
+    
+    Used for arrival time and variance/std dev
+    """
+    vessel_perf = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
+    vessel_output = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
+    have_output = False
+    for vessel in range(num_vessels):
+        vessel_wsp = getattr(wsp.output, "vessel%i" % (vessel+1))
+        vessel_img = getattr(vessel_wsp.native, output, None)
+        if vessel_img is not None:
+            vessel_perf[..., vessel] = vessel_wsp.native.perfusion.data
+            vessel_output[..., vessel] = vessel_img.data
+            have_output = True
+
+    if have_output:
+        if method == "singleperf":
+            # This selects the arrival time from a single vessel with highest perfusion
+            best_vessel = np.argmax(vessel_perf, -1)
+            shape3d, t = vessel_output.shape[:-1], vessel_output.shape[-1]
+            flat = vessel_output.reshape(-1, t)[np.arange(np.prod(shape3d)), best_vessel.ravel()]
+            all_vessel_output = flat.reshape(shape3d)
+            wsp.output.all_vessels.native.best_vessel = Image(best_vessel+1, header=wsp.asldata.header)
+        elif method == "weightedperf":
+            # Tests the arrival time from a weighted average of vessels weighted by perfusion. Note that
+            # we need to protect against divide by zero
+            total_perf = wsp.output.all_vessels.native.perfusion.data
+            total_perf[total_perf == 0] = 1
+            all_vessel_output = np.nan_to_num(np.sum(vessel_perf * vessel_output, axis=-1) / total_perf)
+        #elif combine_method == "weightedprob":
+        #    # Sets the arrival time as a weighted average by vessel probability FIXME not working right now
+        #    all_vessel_output = np.sum(prob * vessel_arrival, axis=-1)
+        else:
+            raise ValueError("Unrecognized combination method for weighted combination: %s" % method)
+        setattr(wsp.output.all_vessels.native, output, Image(all_vessel_output, header=wsp.asldata.header))
+
 def _combine_vessels(wsp, num_vessels):
+    """
+    Generate combined output for all vessels
+    """
     from oxasl import oxford_asl
     wsp.log.write("\nGenerating combined images for all vessels\n\n")
 
@@ -318,68 +380,13 @@ def _combine_vessels(wsp, num_vessels):
     wsp.output.sub("all_vessels")
     wsp.output.all_vessels.sub("native")
     for otype in ("", "_calib", "_std", "_var", "_std_calib", "_var_calib"):
-        # Generate combined arrival maps for most outputs by summing the single
-        # vessel outputs. Note that we can sum the variance because the variables
-        # are Gaussian, but not the standard deviation where we need to sum the
-        # squares and then take the square root
-        is_std = otype.startswith("_std")
-        for oname in ("perfusion", "aCBV", "modelfit"):
+        for oname in ("perfusion", "aCBV", "modelfit", "arrival"):
             output = "%s%s" % (oname, otype)
-            have_output = False
-            all_vessel_img = None
-            for vessel in range(num_vessels):
-                vessel_wsp = getattr(wsp.output, "vessel%i" % (vessel+1))
-                vessel_img = getattr(vessel_wsp.native, output, None)
-                if vessel_img is not None:
-                    if all_vessel_img is None:
-                        all_vessel_img = np.zeros(vessel_img.shape, dtype=np.float)
-                    if is_std:
-                        all_vessel_img += np.square(vessel_img.data)
-                    else:
-                        all_vessel_img += vessel_img.data
-                    have_output = True
-            if have_output:
-                if is_std:
-                    all_vessel_img = np.sqrt(all_vessel_img)
-                setattr(wsp.output.all_vessels.native, output, Image(all_vessel_img, header=wsp.asldata.header))
-
-        # Generate combined arrival map which is more complex than a simple sum
-        output = "arrival%s" % otype
-        vessel_perf = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
-        vessel_arrival = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
-        have_arrival = False
-        for vessel in range(num_vessels):
-            vessel_wsp = getattr(wsp.output, "vessel%i" % (vessel+1))
-            vessel_img = getattr(vessel_wsp.native, output, None)
-            if vessel_img is not None:
-                vessel_perf[..., vessel] = vessel_wsp.native.perfusion.data
-                vessel_arrival[..., vessel] = vessel_img.data
-                have_arrival = True
-
-        if have_arrival:
-            combine_method = wsp.ifnone("arrival_combine", "weightedperf")
-            if combine_method == "singleperf":
-                # This selects the arrival time from a single vessel with highest perfusion
-                best_vessel = np.argmax(vessel_perf, -1)
-                shape3d, t = vessel_arrival.shape[:-1], vessel_arrival.shape[-1]
-                flat = vessel_arrival.reshape(-1, t)[np.arange(np.prod(shape3d)), best_vessel.ravel()]
-                all_vessel_arrival = flat.reshape(shape3d)
-                wsp.output.all_vessels.native.best_vessel = Image(best_vessel+1, header=wsp.asldata.header)
-            elif combine_method == "weightedperf":
-                # Tests the arrival time from a weighted average of vessels weighted by perfusion. Note that
-                # we need to account for variance as above
-                if is_std:
-                    vessel_arrival = np.square(vessel_arrival)
-                all_vessel_arrival = np.nan_to_num(np.sum(vessel_perf * vessel_arrival, axis=-1) / wsp.output.all_vessels.native.perfusion.data)
-                if is_std:
-                    all_vessel_arrival = np.sqrt(all_vessel_arrival)
-            #elif combine_method == "weightedprob":
-            #    # Sets the arrival time as a weighted average by vessel probability FIXME not working right now
-            #    all_vessel_arrival = np.sum(prob * vessel_arrival, axis=-1)
+            if oname != "arrival" and otype  in ("", "_calib"):
+                _combine_vessels_sum(wsp, num_vessels, output)                
             else:
-                raise ValueError("Unrecognized combination method for single-vessel arrival time: %s" % combine_method)
-            setattr(wsp.output.all_vessels.native, output, Image(all_vessel_arrival, header=wsp.asldata.header))
-    
+                _combine_vessels_weighted(wsp, num_vessels, output, method=wsp.ifnone("arrival_combine", "weightedperf"))
+
     report = Report("Combined output for all vessels")
     oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
     wsp.report.add("all_vessels", report)

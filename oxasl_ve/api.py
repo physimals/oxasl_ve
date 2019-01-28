@@ -6,6 +6,7 @@ Library for processing vessel-encoded ASL data
 Copyright (c) 2008-2013 Univerisity of Oxford
 """
 import math
+import traceback
 
 import numpy as np
 
@@ -25,44 +26,48 @@ def veslocs_to_enc(veslocs, nvols=8):
     """      
     if nvols not in (6, 8):
         raise ValueError("Auto-generation of encoding matrix only supported for 6 or 8 encoding cycles")
-        
-    num_vessels = veslocs.shape[1]
+
+    num_vessels = veslocs.shape[-1]
     if num_vessels != 4:
         raise ValueError("Auto-generation of encoding matrix only supported with 4 inferred vessels")
-        
-    lr1, lr2 = veslocs[0, 0], veslocs[0, 1]
-    ap1, ap2 = np.mean(veslocs[1, :2]), np.mean(veslocs[1, 2:])
-    two = [
-        [0, 0, 0, 0],
-        [0, 1, 0, 0],
-        [90, 2, lr1, lr2],
-        [90, 3, lr1, lr2],
-        [0, 2, ap1, ap2],
-        [0, 3, ap1, ap2],
-    ]
-    if nvols == 8:
-        # Vector from RC to LV
-        LV_minus_RC = veslocs[:2, 3] - veslocs[:2, 0]
 
-        # Want to tag RC and LV simultaneously - gradient angle required
-        # is acos[normalised(LV - RC).x]
-        tag_rad = math.acos(LV_minus_RC[0] / np.linalg.norm(LV_minus_RC))
-        tag_deg = math.degrees(tag_rad)
-
-        # Unit vector in gradient direction
-        G = [math.sin(tag_rad), math.cos(tag_rad)]
-
-        # Calculate distance from isocentre to each vessel
-        # Dot product of location with gradient unit vector
-        isodist = [sum(veslocs[:2, v] * G) for v in range(num_vessels)]
-        vA = (isodist[0] + isodist[3])/2
-        vB = vA + (abs(vA -isodist[1]) + abs(vA - isodist[2]))/2
-        two += [
-            [tag_deg, 2, vA, vB],
-            [tag_deg, 3, vA, vB],
+    try:
+        lr1, lr2 = veslocs[0, 0], veslocs[0, 1]
+        ap1, ap2 = np.mean(veslocs[1, :2]), np.mean(veslocs[1, 2:])
+        two = [
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+            [90, 2, lr1, lr2],
+            [90, 3, lr1, lr2],
+            [0, 2, ap1, ap2],
+            [0, 3, ap1, ap2],
         ]
+        if nvols == 8:
+            # Vector from RC to LV
+            LV_minus_RC = veslocs[:2, 3] - veslocs[:2, 0]
 
-    return np.array(two, dtype=np.float)
+            # Want to tag RC and LV simultaneously - gradient angle required
+            # is acos[normalised(LV - RC).x]
+            tag_rad = math.acos(LV_minus_RC[0] / np.linalg.norm(LV_minus_RC))
+            tag_deg = math.degrees(tag_rad)
+
+            # Unit vector in gradient direction
+            G = [math.sin(tag_rad), math.cos(tag_rad)]
+
+            # Calculate distance from isocentre to each vessel
+            # Dot product of location with gradient unit vector
+            isodist = [sum(veslocs[:2, v] * G) for v in range(num_vessels)]
+            vA = (isodist[0] + isodist[3])/2
+            vB = vA + (abs(vA -isodist[1]) + abs(vA - isodist[2]))/2
+            two += [
+                [tag_deg, 2, vA, vB],
+                [tag_deg, 3, vA, vB],
+            ]
+
+        return np.array(two, dtype=np.float)
+    except: 
+        traceback.print_exc()
+        raise RuntimeError("Error generating encoding matrix from vessel locations. Check your vessel locations file.")
 
 def two_to_mac(two):
     """
@@ -217,6 +222,9 @@ def _decode(wsp):
     if wsp.veasl is None:
         wsp.sub("veasl")
 
+    if wsp.veslocs.ndim != 2 or wsp.veslocs.shape[0] != 2:
+        raise ValueError("Vessel locations should have two rows (XY co-ordinates) and one column per vessel")
+    
     wsp.log.write("\nPerforming vessel decoding\n")
     wsp.log.write(" - Initial vessel locations:\n")
     wsp.log.write("   X: %s\n" % wsp.veslocs[0, :])
@@ -439,8 +447,7 @@ def model_ve(wsp):
     _model_vessels(wsp, num_vessels)
     _combine_vessels(wsp, num_vessels)
 
-    # Re-do registration using all-vessel PWI map. Pointless right now but required if 
-    # we want to add PVC or structural space output
+    # Re-do registration using all-vessel PWI map.
     oxford_asl.redo_reg(wsp, wsp.output.all_vessels.native.perfusion)
 
     oxford_asl.output_trans(wsp.output.all_vessels)

@@ -1,73 +1,99 @@
 #!/usr/bin/env python
 """
-Build Python interface for veaslc
+Setup script for oxasl_ve
 """
 import os
-import sys
 import subprocess
 import re
+import io
 
-from setuptools import setup, find_packages
+from setuptools import setup
+from setuptools import find_packages
+
+MODULE = 'oxasl_ve'
+
+def get_filetext(rootdir, filename):
+    """ Get the text of a local file """
+    with io.open(os.path.join(rootdir, filename), encoding='utf-8') as f:
+        return f.read()
 
 def git_version():
-    # Full version includes the Git commit hash
-    full_version = subprocess.check_output('git describe --dirty', shell=True).decode("utf-8").strip(" \n")
+    """ Get the full and python standardized version from Git tags (if possible) """
+    try:
+        # Full version includes the Git commit hash
+        full_version = subprocess.check_output('git describe --dirty', shell=True).decode("utf-8").strip(" \n")
 
-    # Python standardized version in form major.minor.patch.dev<build>
-    version_regex = re.compile(r"v?(\d+\.\d+\.\d+(-\d+)?).*")
-    match = version_regex.match(full_version)
-    if match:
-        std_version = match.group(1).replace("-", ".dev")
-    else:
-        raise RuntimeError("Failed to parse version string %s" % full_version)
-
-    return full_version, std_version
+        # Python standardized version in form major.minor.patch.post<build>
+        version_regex = re.compile(r"v?(\d+\.\d+\.\d+(-\d+)?).*")
+        match = version_regex.match(full_version)
+        if match:
+            std_version = match.group(1).replace("-", ".post")
+        else:
+            raise RuntimeError("Failed to parse version string %s" % full_version)
+        return full_version, std_version
+    except:
+        # Any failure, return None. We may not be in a Git repo at all
+        return None, None
 
 def git_timestamp():
-    return subprocess.check_output('git log -1 --format=%cd', shell=True).decode("utf-8").strip(" \n")
+    """ Get the last commit timestamp from Git (if possible)"""
+    try:
+        return subprocess.check_output('git log -1 --format=%cd', shell=True).decode("utf-8").strip(" \n")
+    except:
+        # Any failure, return None. We may not be in a Git repo at all
+        return None
 
-def set_metadata(module_dir, version_str, timestamp_str):
-    vfile = open(os.path.join(module_dir, "oxasl_ve", "_version.py"), "w")
-    vfile.write("__version__ = '%s'\n" % version_str)
-    vfile.write("__timestamp__ = '%s'\n" % timestamp_str)
-    vfile.close()
+def update_metadata(rootdir, version_str, timestamp_str):
+    """ Update the version and timestamp metadata in the module _version.py file """
+    with io.open(os.path.join(rootdir, MODULE, "_version.py"), "w", encoding='utf-8') as f:
+        f.write("__version__ = '%s'\n" % version_str)
+        f.write("__timestamp__ = '%s'\n" % timestamp_str)
 
-# Read in requirements from the requirements.txt file.
-with open('requirements.txt', 'rt') as f:
-    requirements = [l.strip() for l in f.readlines()]
+def get_requirements(rootdir):
+    """ Get a list of all entries in the requirements file """
+    with io.open(os.path.join(rootdir, 'requirements.txt'), encoding='utf-8') as f:
+        return [l.strip() for l in f.readlines()]
 
-# Generate a list of all of the packages that are in your project.
-packages = find_packages()
+def get_version(rootdir):
+    """ Get the current version number (and update it in the module _version.py file if necessary)"""
+    version, timestamp = git_version()[1], git_timestamp()
 
-rootdir = os.path.join(os.path.abspath(os.path.dirname(__file__)))
-_, stdv = git_version()
-timestamp = git_timestamp()
-set_metadata(rootdir, stdv, timestamp)
+    if version is not None and timestamp is not None:
+        # We got the metadata from Git - update the version file
+        update_metadata(rootdir, version, timestamp)
+    else:
+        # Could not get metadata from Git - use the version file if it exists
+        with io.open(os.path.join(rootdir, MODULE, '_version.py'), encoding='utf-8') as f:
+            md = f.read()
+            match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", md, re.M)
+            if match:
+                version = match.group(1)
+            else:
+                version = "unknown"
+    return version
 
-desc = "Python interface for vessel-encoded ASL"
-longdesc = desc
+module_dir = os.path.abspath(os.path.dirname(__file__))
 
-# setup parameters
-setup(name='oxasl_ve',
-      version=stdv,
-      description=desc,
-      long_description=longdesc,
-      author='Michael Chappell, Martin Craig',
-      author_email='martin.craig@eng.ox.ac.uk',
-      packages=packages,
-      include_package_data=True,
-      data_files=[],
-      setup_requires=[],
-      install_requires=[],
-      entry_points={
-      },
-      classifiers=["Programming Language :: Python :: 2.7",
-                   "Development Status:: 3 - Alpha",
-                   'Programming Language :: Python',
-                   'Operating System :: MacOS :: MacOS X',
-                   'Operating System :: Microsoft :: Windows',
-                   'Operating System :: POSIX',
-                   "Intended Audience :: Education",
-                   "Intended Audience :: Science/Research",
-                   "Intended Audience :: End Users/Desktop",
-                   "Topic :: Scientific/Engineering :: Bio-Informatics",])
+kwargs = {
+    'name' : 'oxasl-ve',
+    'version' : get_version(module_dir),
+    'description' : 'Python library for manipulating and modelling ASL data',
+    'long_description' : get_filetext(module_dir, 'README.md'),
+    'long_description_content_type' : 'text/markdown',
+    'url' : 'https://oxasl.readthedocs.io/',
+    'author' : 'Martin Craig',
+    'author_email' : 'martin.craig@eng.ox.ac.uk',
+    'license' : 'License granted by University of Oxford for use by academics carrying out research and not for use by consumers or commercial businesses. See LICENSE file for more details',
+    'install_requires' : get_requirements(module_dir),
+    'packages' : find_packages(),
+    'classifiers' : [
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Science/Research',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
+        'License :: Free for non-commercial use',
+    ],
+}
+
+setup(**kwargs)

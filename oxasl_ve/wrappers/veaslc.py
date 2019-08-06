@@ -21,6 +21,7 @@ def veaslc(data, roi, veslocs, encdef, imlist, modmat, out="veaslc", **kwargs):
     valmap = {
         'inferv' : wutils.SHOW_IF_TRUE,
         'debug' : wutils.SHOW_IF_TRUE,
+        'diff' : wutils.SHOW_IF_TRUE,
     }
 
     asrt.assertIsNifti(data)

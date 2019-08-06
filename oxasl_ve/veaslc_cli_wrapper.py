@@ -6,6 +6,7 @@ def veaslc_wrapper(wsp, data, roi):
     """
     # Run the C code
     ret = veaslc(data, roi, out=LOAD,
+                 diff=data.iaf == "vediff",
                  method=wsp.ifnone("veasl_method", "map"),
                  veslocs=wsp.veslocs, 
                  imlist="T0123456", # FIXME

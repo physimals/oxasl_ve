@@ -241,7 +241,7 @@ def _decode(wsp):
             wsp.veasl.imlist = imlist
     else:
         # Auto-generate encoding definition from the initial vessel locations
-        wsp.veasl.enc_two = veslocs_to_enc(wsp.veslocs, wsp.asldata.ntc)
+        wsp.veasl.enc_two = veslocs_to_enc(wsp.veslocs, wsp.asldata.nenc)
         wsp.veasl.enc_mac, wsp.veasl.imlist = two_to_mac(wsp.veasl.enc_two)
     
     wsp.log.write("\n - Encoding matrix:\nTWO\n")
@@ -306,7 +306,7 @@ def _model_vessels(wsp, num_vessels):
     for vessel in range(num_vessels):
         wsp.log.write("\n - Processing vessel %i\n" % (vessel+1))
         wsp_ves = wsp.veasl.sub("vessel%i" % (vessel+1))
-        vessel_data = np.zeros(list(wsp.asldata.shape[:3]) + [wsp.asldata.ntis,])
+        vessel_data = np.zeros(list(wsp.asldata.shape[:3]) + [wsp.asldata.ntis,], dtype=np.float)
         for ti_idx in range(wsp.asldata.ntis):
             flow = getattr(wsp.veasl, "pld%i" % (ti_idx+1)).flow
             vessel_data[..., ti_idx] = flow.data[..., vessel] * 2

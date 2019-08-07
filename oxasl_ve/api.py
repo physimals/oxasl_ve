@@ -255,6 +255,10 @@ def _decode(wsp):
     if wsp.modmat is None:
         wsp.veasl.modmat = modmat_default
 
+    # Set iaf on the workspace so it is always possible to detect when we are using
+    # pairwise subtracted data
+    wsp.veasl.iaf = wsp.asldata.iaf
+
     # Make sure encoding cycles are together in the data and 
     # average over repeats if required FIXME is this wise/required?
     wsp.veasl.asldata_mar = wsp.asldata.mean_across_repeats(diff=False).reorder(out_order="lrt")
@@ -270,9 +274,6 @@ def _decode(wsp):
 
         wsp_init = wsp.veasl.sub("init")
         wsp_init.asldata = asldata_mean
-        # HACK the mean data does not have the ASL metadata, and we need the IAF 
-        # to see if it is subtracted or not
-        wsp_init.asldata.iaf = wsp.asldata.iaf
 
         _decode_infer(wsp_init)
         wsp.veasl.veslocs_orig = wsp.veasl.veslocs

@@ -270,6 +270,9 @@ def _decode(wsp):
 
         wsp_init = wsp.veasl.sub("init")
         wsp_init.asldata = asldata_mean
+        # HACK the mean data does not have the ASL metadata, and we need the IAF 
+        # to see if it is subtracted or not
+        wsp_init.asldata.iaf = wsp.asldata.iaf
 
         _decode_infer(wsp_init)
         wsp.veasl.veslocs_orig = wsp.veasl.veslocs

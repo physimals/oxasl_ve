@@ -207,7 +207,7 @@ def _decode_infer(wsp):
     wsp.set_item("veasl_log", log, save_fn=str)
     wsp.flow = flow
     wsp.prob = prob
-    wsp.pis = extras["pis"]
+    wsp.pis = np.array(extras["pis"])
     wsp.veslocs = np.array([extras["x"], extras["y"]])
     wsp.log.write("   - Vessel locations (inference: %s):\n" % wsp.infer_loc)
     wsp.log.write("     X: %s\n" % wsp.veslocs[0, :])

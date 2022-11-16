@@ -232,18 +232,26 @@ def _decode(wsp):
     num_vessels = wsp.veslocs.shape[1]
 
     if wsp.encdef is not None:
-        # Encoding definition supplied by user - assumed to be in MAC format. 
-        wsp.veasl.enc_mac = wsp.encdef
-        wsp.veasl.enc_two, imlist = mac_to_two(wsp.veasl.enc_mac)
+        # Encoding definition supplied by user
+        wsp.log.write("\n - Encoding definition supplied by user in '%s' format\n" % wsp.encdef_format)
+        if wsp.encdef_format == "mac":
+            wsp.veasl.enc_mac = wsp.encdef
+            wsp.veasl.enc_two, imlist = mac_to_two(wsp.veasl.enc_mac)
+        elif wsp.encdef_format == "two":
+            wsp.veasl.enc_two = wsp.encdef
+            wsp.veasl.enc_mac, imlist = two_to_mac(wsp.veasl.enc_two)
+        else:
+            raise ValueError("Unknown encoding definition format: %s" % wsp.encdef_format)
 
         # imlist describes the series of encoded volumes - normally the default is fine
         if wsp.imlist is None:
             wsp.veasl.imlist = imlist
     else:
         # Auto-generate encoding definition from the initial vessel locations
+        wsp.log.write("\n - Encoding definition will be automatically generated from vessel locations")
         wsp.veasl.enc_two = veslocs_to_enc(wsp.veslocs, wsp.asldata.nenc)
         wsp.veasl.enc_mac, wsp.veasl.imlist = two_to_mac(wsp.veasl.enc_two)
-    
+
     wsp.log.write("\n - Encoding matrix:\nTWO\n")
     for row in wsp.veasl.enc_two:
         wsp.log.write("   %s\n" % ", ".join([str(v) for v in row]))
@@ -482,6 +490,8 @@ class VeaslOptions(OptionCategory):
         g.add_option("--v-std", help="Prior standard deviation for flow velocity if using --infer-v", type="float", default=0.01)
         g.add_option("--infer-mask-frac", help="Fraction of 99th percentile to use when generating inference mask", type="float", default=0.5)
         g.add_option("--modmat", help="Modulation matrix file")
+        g.add_option("--encdef", help="Encoding definition file", type="matrix")
+        g.add_option("--encdef-format", help="Encoding definition file format", default="mac")
         g.add_option("--arrival-combine", help="Method for combining arrival time maps", choices=["weightedperf", "singleperf"], default="weightedperf")
         ret.append(g)
         g = IgnorableOptionGroup(parser, "VEASL options for --method=mcmc")

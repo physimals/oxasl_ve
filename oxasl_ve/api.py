@@ -230,18 +230,25 @@ def _decode(wsp):
     num_vessels = wsp.veslocs.shape[1]
 
     if wsp.encdef is not None:
-        # Encoding definition supplied by user - assumed to be in MAC format. 
-        wsp.enc_mac = wsp.encdef
-        wsp.enc_two, imlist = mac_to_two(wsp.enc_mac)
+        # Encoding definition supplied by user
+        wsp.log.write("\n - Encoding definition supplied by user in '%s' format\n" % wsp.encdef_format)
+        if wsp.encdef_format == "mac":
+            wsp.enc_mac = wsp.encdef
+            wsp.enc_two, imlist = mac_to_two(wsp.enc_mac)
+        elif wsp.encdef_format == "two":
+            wsp.enc_two = wsp.encdef
+            wsp.enc_mac, imlist = two_to_mac(wsp.enc_two)
+        else:
+            raise ValueError("Unknown encoding definition format: %s" % wsp.encdef_format)
 
         # imlist describes the series of encoded volumes - normally the default is fine
         if wsp.imlist is None:
             wsp.imlist = imlist
     else:
-        # Auto-generate encoding definition from the initial vessel locations
+        wsp.log.write("\n - Encoding definition will be automatically generated from vessel locations")
         wsp.enc_two = veslocs_to_enc(wsp.veslocs, wsp.asldata.nenc)
         wsp.enc_mac, wsp.imlist = two_to_mac(wsp.enc_two)
-    
+
     wsp.log.write("\n - Encoding matrix:\nTWO\n")
     for row in wsp.enc_two:
         wsp.log.write("   %s\n" % ", ".join([str(v) for v in row]))
@@ -502,6 +509,8 @@ class VeaslOptions(OptionCategory):
         g.add_option("--v-std", help="Prior standard deviation for flow velocity if using --infer-v", type="float", default=0.01)
         g.add_option("--infer-mask-frac", help="Fraction of 99th percentile to use when generating inference mask", type="float", default=0.5)
         g.add_option("--modmat", help="Modulation matrix file")
+        g.add_option("--encdef", help="Encoding definition file", type="matrix")
+        g.add_option("--encdef-format", help="Encoding definition file format", default="mac")
         g.add_option("--arrival-combine", help="Method for combining arrival time maps", choices=["weightedperf", "singleperf"], default="weightedperf")
         ret.append(g)
         g = OptionGroup(parser, "VEASL options for --method=mcmc")

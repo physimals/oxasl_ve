@@ -24,13 +24,18 @@ from .modmat_default import modmat_default
 def veslocs_to_enc(veslocs, nvols=8):
     """
     Automatically generate an encoding scheme matrix given initial vessel locations
+
+    :param veslocs: Numpy array of vessel locations each column is vessel and row
+                    1 is X values, row 2 is y values
     """      
-    if nvols not in (6, 8):
-        raise ValueError("Auto-generation of encoding matrix only supported for 6 or 8 encoding cycles")
+    if nvols not in (6, 8, 12):
+        raise ValueError("Auto-generation of encoding matrix only supported for 6, 8 or 12 encoding cycles")
 
     num_vessels = veslocs.shape[-1]
-    if num_vessels != 4:
-        raise ValueError("Auto-generation of encoding matrix only supported with 4 inferred vessels")
+    if nvols in (6, 8) and num_vessels != 4:
+        raise ValueError("6 and 8 cycle encoding requires 4 vessel locations")
+    elif nvols == 12 and num_vessels != 6:
+        raise RuntimeError("12 cycle encoding requires 6 vessel locations")
 
     try:
         lr1, lr2 = veslocs[0, 0], veslocs[0, 1]
@@ -43,9 +48,9 @@ def veslocs_to_enc(veslocs, nvols=8):
             [0, 2, ap1, ap2],
             [0, 3, ap1, ap2],
         ]
-        if nvols == 8:
+        if nvols > 6:
             # Vector from RC to LV
-            LV_minus_RC = veslocs[:2, 3] - veslocs[:2, 0]
+            LV_minus_RC = veslocs[:, 3] - veslocs[:, 0]
 
             # Want to tag RC and LV simultaneously - gradient angle required
             # is acos[normalised(LV - RC).x]
@@ -57,12 +62,38 @@ def veslocs_to_enc(veslocs, nvols=8):
 
             # Calculate distance from isocentre to each vessel
             # Dot product of location with gradient unit vector
-            isodist = [sum(veslocs[:2, v] * G) for v in range(num_vessels)]
+            isodist = [np.dot(veslocs[:, v], G) for v in range(num_vessels)]
             vA = (isodist[0] + isodist[3])/2
             vB = vA + (abs(vA -isodist[1]) + abs(vA - isodist[2]))/2
             two += [
                 [tag_deg, 2, vA, vB],
                 [tag_deg, 3, vA, vB],
+            ]
+        if nvols == 12:
+            # 9 and 10: RICA vs RECA
+            RC_minus_REC = veslocs[:, 0] - veslocs[:, 4]
+            tag_rad = math.acos(RC_minus_REC[0] / np.linalg.norm(RC_minus_REC))
+            tag_deg = math.degrees(tag_rad)
+           
+            # Calculate distances from isocentre in this direction
+            # Note that isodist has already been defined above
+            vA9and10 = isodist[4] # RECA
+            vB9and10 = isodist[0] # RICA
+            two += [
+                [tag_deg, 2, vA9and10, vB9and10],
+                [tag_deg, 3, vA9and10, vB9and10],
+            ]
+
+            # 11 and 12: LICA vs LECA as above
+            LEC_minus_LC = veslocs[:, 5] - veslocs[:, 1]
+            tag_rad = math.acos(LEC_minus_LC[0] / np.linalg.norm(LEC_minus_LC))
+            tag_deg = math.degrees(tag_rad)
+            
+            vA11and12 = isodist[1] # LICA
+            vB11and12 = isodist[5] # LECA
+            two += [
+                [tag_deg, 2, vA11and12, vB11and12],
+                [tag_deg, 3, vA11and12, vB11and12],
             ]
 
         return np.array(two, dtype=np.float)

@@ -463,6 +463,9 @@ def _combine_vessels(wsp, num_vessels):
             else:
                 _combine_vessels_weighted(wsp, num_vessels, basil_output, method=wsp.ifnone("arrival_combine", "weightedperf"))
 
+    # All Basil-type directories must save the analysis mask
+    wsp.basil.analysis_mask = wsp.basil_vessel1.analysis_mask
+
     #report = Report("Combined output for all vessels")
     #oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
     #wsp.report.add("all_vessels", report)

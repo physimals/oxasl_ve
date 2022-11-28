@@ -541,6 +541,7 @@ class VeaslOptions(OptionCategory):
         g.add_option("--rot-std", help="Prior standard deviation for rotation angle (degrees) if using rigid body inference", type="float", default=1.2)
         g.add_option("--v-mean", help="Prior mean flow velocity if using --infer-v", type="float", default=0.3)
         g.add_option("--v-std", help="Prior standard deviation for flow velocity if using --infer-v", type="float", default=0.01)
+        g.add_option("--infer-mask", help="Inference mask", type="image")
         g.add_option("--infer-mask-frac", help="Fraction of 99th percentile to use when generating inference mask", type="float", default=0.5)
         g.add_option("--modmat", help="Modulation matrix file")
         g.add_option("--encdef", help="Encoding definition file", type="matrix")

@@ -337,11 +337,11 @@ def _model_vessels(wsp, num_vessels):
     #  directly estimating B, rather than 2B, so the output of the decoding is half what 
     #  you would expect from a conventional control - label subtraction."
     #    - Thomas Okell
-    basildirs = []
+    quantify_wsps = []
     for vessel in range(num_vessels):
         wsp.log.write("\n - Processing vessel %i\n" % (vessel+1))
         subname = "basil_vessel%i" % (vessel+1)
-        basildirs.append("vessel%i" % (vessel+1))
+        quantify_wsps.append(subname)
         wsp_ves = wsp.sub(subname)
         vessel_data = np.zeros(list(wsp.asldata.shape[:3]) + [wsp.asldata.ntis,], dtype=np.float)
         for ti_idx in range(wsp.asldata.ntis):
@@ -349,10 +349,10 @@ def _model_vessels(wsp, num_vessels):
             vessel_data[..., ti_idx] = flow.data[..., vessel] * 2
         wsp_ves.asldata = wsp.veasl.asldata_mar.derived(vessel_data, iaf="diff", order="rt")
         wsp_ves.iaf = wsp_ves.asldata.iaf
-        basil.basil(wsp_ves)
+        basil.fit.run(wsp_ves)
         report = Report("Output for vessel %i" % (vessel+1))
         wsp.report.add(subname, report)
-    wsp.basildirs = basildirs
+    wsp.quantify_wsps = quantify_wsps
 
 def _combine_vessels_sum(wsp, num_vessels, basil_output):
     """
@@ -454,7 +454,6 @@ def _combine_vessels(wsp, num_vessels):
     wsp.sub("basil")
 
     # Generate combined perfusion and aCBV maps over all vessels
-    wsp.sub("basil")
     for otype in ("", "mean_", "std_"):
         for oname in ("ftiss", "fblood", "modelfit", "delttiss", "deltblood"):
             basil_output = "%s%s" % (otype, oname)
@@ -469,7 +468,7 @@ def _combine_vessels(wsp, num_vessels):
     #report = Report("Combined output for all vessels")
     #oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
     #wsp.report.add("all_vessels", report)
-    wsp.basildirs.append("")
+    wsp.quantify_wsps.append("basil")
 
 def run(wsp):
     """

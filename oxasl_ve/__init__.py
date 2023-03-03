@@ -9,7 +9,7 @@ The relevant processing function can also be called independently
 on a ``Workspace`` object, however this will not include the
 standard oxasl preprocessing or registration.
 """
-from .api import run, VeaslOptions, two_to_mac, mac_to_two, veslocs_to_enc, generate_mask
+from .api import run, Options, two_to_mac, mac_to_two, veslocs_to_enc, generate_mask
 from ._version import __version__
 
-__all__ = ["__version__", "run", "VeaslOptions", "two_to_mac", "mac_to_two", "veslocs_to_enc", "generate_mask"]
+__all__ = ["__version__", "run", "Options", "two_to_mac", "mac_to_two", "veslocs_to_enc", "generate_mask"]

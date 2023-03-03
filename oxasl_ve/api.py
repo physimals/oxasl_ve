@@ -96,7 +96,7 @@ def veslocs_to_enc(veslocs, nvols=8):
                 [tag_deg, 3, vA11and12, vB11and12],
             ]
 
-        return np.array(two, dtype=np.float)
+        return np.array(two, dtype=np.float32)
     except: 
         traceback.print_exc()
         raise RuntimeError("Error generating encoding matrix from vessel locations. Check your vessel locations file.")
@@ -142,7 +142,7 @@ def two_to_mac(two):
             inc += 1
 
     mac = [cx, cy, th, D]
-    return np.array(mac, dtype=np.float), imlist
+    return np.array(mac, dtype=np.float32), imlist
 
 def mac_to_two(mac):
     """ 
@@ -298,7 +298,7 @@ def _decode(wsp):
     wsp.infer_loc = wsp.ifnone("infer_loc", "rigid")
     if wsp.init_loc and wsp.asldata.ntis > 1:
         wsp.log.write("\n - Doing initial fit for vessel locations using mean data\n")
-        asldata_mean = np.zeros(list(wsp.asldata_mar.data.shape[:3]) + [wsp.asldata.ntc], dtype=np.float)
+        asldata_mean = np.zeros(list(wsp.asldata_mar.data.shape[:3]) + [wsp.asldata.ntc], dtype=np.float32)
         for idx in range(wsp.asldata.ntis):
             asldata_mean += wsp.asldata_mar[..., idx*wsp.asldata.ntc:(idx+1)*wsp.asldata.ntc]
         asldata_mean /= wsp.asldata.ntis
@@ -343,7 +343,7 @@ def _model_vessels(wsp, num_vessels):
         subname = "basil_vessel%i" % (vessel+1)
         quantify_wsps.append(subname)
         wsp_ves = wsp.sub(subname)
-        vessel_data = np.zeros(list(wsp.asldata.shape[:3]) + [wsp.asldata.ntis,], dtype=np.float)
+        vessel_data = np.zeros(list(wsp.asldata.shape[:3]) + [wsp.asldata.ntis,], dtype=np.float32)
         for ti_idx in range(wsp.asldata.ntis):
             flow = getattr(wsp.veasl, "pld%i" % (ti_idx+1)).flow
             vessel_data[..., ti_idx] = flow.data[..., vessel] * 2
@@ -374,7 +374,7 @@ def _combine_vessels_sum(wsp, num_vessels, basil_output):
             vessel_img = getattr(step_wsp, basil_output, None)
             if vessel_img is not None:
                 if all_vessel_img is None:
-                    all_vessel_img = np.zeros(vessel_img.shape, dtype=np.float)
+                    all_vessel_img = np.zeros(vessel_img.shape, dtype=np.float32)
                 all_vessel_img += vessel_img.data
         if all_vessel_img is not None:
             all_vessel_step_wsp = getattr(wsp.basil, step_name, None)
@@ -401,8 +401,8 @@ def _combine_vessels_weighted(wsp, num_vessels, basil_output, method="weightedpe
         step_name = "step%i" % step
         all_vessel_img = None
 
-        vessel_perf = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
-        vessel_output = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float)
+        vessel_perf = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float32)
+        vessel_output = np.zeros(list(wsp.asldata.shape[:3]) + [num_vessels,], dtype=np.float32)
         have_output = False
         for vessel in range(num_vessels):
             vessel_wsp = getattr(wsp, "basil_vessel%i" % (vessel+1))
@@ -518,7 +518,7 @@ def run(wsp):
 
     wsp.log.write("\nDONE processing\n")
 
-class VeaslOptions(OptionCategory):
+class Options(OptionCategory):
     """
     OptionCategory which contains options for preprocessing ASL data
     """

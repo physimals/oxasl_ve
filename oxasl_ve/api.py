@@ -220,7 +220,7 @@ def generate_mask(data, imlist, frac=0.5):
     tag_idx, ctl_idx = imlist.index(-1), imlist.index(0)
     diffdata = np.abs(data[..., tag_idx] - data[..., ctl_idx])
     thresh = np.percentile(diffdata, 99) * (1-frac)
-    return (diffdata > thresh).astype(np.int)
+    return (diffdata > thresh).astype(np.int32)
 
 def _autogen_mask(wsp):
     maskdata = generate_mask(wsp.asldata.data, wsp.imlist, wsp.ifnone("infer_mask_frac", 0.5))

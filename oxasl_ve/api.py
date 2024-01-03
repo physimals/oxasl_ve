@@ -13,13 +13,16 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from oxasl import basil
+from oxasl import basil, reg
 from oxasl.options import OptionCategory
 from oxasl.reporting import Report
 
 from ._version import __version__
 from .veaslc_cli_wrapper import veaslc_wrapper
 from .modmat_default import modmat_default
+
+# How many decimals to round encoding matrix to (to avoid small numerical differences)
+ROUND_NDECIMALS = 4
 
 def veslocs_to_enc(veslocs, nvols=8):
     """
@@ -96,7 +99,7 @@ def veslocs_to_enc(veslocs, nvols=8):
                 [tag_deg, 3, vA11and12, vB11and12],
             ]
 
-        return np.array(two, dtype=np.float32)
+        return np.round(np.array(two, dtype=np.float32), decimals=ROUND_NDECIMALS)
     except: 
         traceback.print_exc()
         raise RuntimeError("Error generating encoding matrix from vessel locations. Check your vessel locations file.")
@@ -142,7 +145,7 @@ def two_to_mac(two):
             inc += 1
 
     mac = [cx, cy, th, D]
-    return np.array(mac, dtype=np.float32), imlist
+    return np.round(np.array(mac, dtype=np.float32), decimals=ROUND_NDECIMALS), imlist
 
 def mac_to_two(mac):
     """ 
@@ -197,12 +200,12 @@ def mac_to_two(mac):
         if idx > 1 and idx % 2 == 1:
             vb[idx] = vb[idx] - 2*d[idx]
             va[idx] = va[idx] - 2*d[idx]
-    
+
         if th_mac[idx] > 180:
             va[idx], vb[idx] = vb[idx], va[idx]
 
     two = np.column_stack((th, imtype, va, vb))
-    return two, imlist
+    return np.round(two, decimals=ROUND_NDECIMALS), imlist
 
 def generate_mask(data, imlist, frac=0.5):
     """
@@ -327,7 +330,7 @@ def _decode(wsp):
 
 def _model_vessels(wsp, num_vessels):
     wsp.log.write("\nProcessing per-vessel decoded images\n\n")
-    
+
     # Generate per-vessel subtracted images. Note that we multiply the flow by 2. Why?
     #
     # "for a standard ASL sequence, in the label condition we measure S - B (where S is 
@@ -349,7 +352,7 @@ def _model_vessels(wsp, num_vessels):
             vessel_data[..., ti_idx] = flow.data[..., vessel] * 2
         wsp_ves.asldata = wsp.veasl.asldata_mar.derived(vessel_data, iaf="diff", order="rt")
         wsp_ves.iaf = wsp_ves.asldata.iaf
-        basil.fit.run(wsp_ves)
+        basil.multistep_fit.run(wsp_ves)
         report = Report("Output for vessel %i" % (vessel+1))
         wsp.report.add(subname, report)
     wsp.quantify_wsps = quantify_wsps
@@ -464,6 +467,9 @@ def _combine_vessels(wsp, num_vessels):
 
     # All Basil-type directories must save the analysis mask
     wsp.basil.analysis_mask = wsp.basil_vessel1.analysis_mask
+
+    # Re-do registration using PWI as reference
+    reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False, use_quantification_wsp=wsp.basil)
 
     #report = Report("Combined output for all vessels")
     #oxford_asl.output_report(wsp.output.all_vessels.native, report=report)

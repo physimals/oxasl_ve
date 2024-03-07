@@ -15,7 +15,6 @@ from fsl.data.image import Image
 
 from oxasl import basil, reg
 from oxasl.options import OptionCategory
-from oxasl.reporting import Report
 
 from ._version import __version__
 from .veaslc_cli_wrapper import veaslc_wrapper
@@ -346,6 +345,7 @@ def _model_vessels(wsp, num_vessels):
         subname = "basil_vessel%i" % (vessel+1)
         quantify_wsps.append(subname)
         wsp_ves = wsp.sub(subname)
+        wsp_ves.full_region_analysis = False
         vessel_data = np.zeros(list(wsp.asldata.shape[:3]) + [wsp.asldata.ntis,], dtype=np.float32)
         for ti_idx in range(wsp.asldata.ntis):
             flow = getattr(wsp.veasl, "pld%i" % (ti_idx+1)).flow
@@ -353,8 +353,6 @@ def _model_vessels(wsp, num_vessels):
         wsp_ves.asldata = wsp.veasl.asldata_mar.derived(vessel_data, iaf="diff", order="rt")
         wsp_ves.iaf = wsp_ves.asldata.iaf
         basil.multistep_fit.run(wsp_ves)
-        report = Report("Output for vessel %i" % (vessel+1))
-        wsp.report.add(subname, report)
     wsp.quantify_wsps = quantify_wsps
 
 def _combine_vessels_sum(wsp, num_vessels, basil_output):
@@ -380,16 +378,16 @@ def _combine_vessels_sum(wsp, num_vessels, basil_output):
                     all_vessel_img = np.zeros(vessel_img.shape, dtype=np.float32)
                 all_vessel_img += vessel_img.data
         if all_vessel_img is not None:
-            all_vessel_step_wsp = getattr(wsp.basil, step_name, None)
+            all_vessel_step_wsp = getattr(wsp.basil_allvessels, step_name, None)
             if all_vessel_step_wsp is None:
-                wsp.basil.sub(step_name)
-                all_vessel_step_wsp = getattr(wsp.basil, step_name)
+                wsp.basil_allvessels.sub(step_name)
+                all_vessel_step_wsp = getattr(wsp.basil_allvessels, step_name)
             setattr(all_vessel_step_wsp, basil_output, Image(all_vessel_img, header=wsp.asldata.header))
         if step_wsp is None:
             break
         step += 1
-    if wsp.basil.finalstep is None:
-        wsp.basil.finalstep = all_vessel_step_wsp
+    if wsp.basil_allvessels.finalstep is None:
+        wsp.basil_allvessels.finalstep = all_vessel_step_wsp
 
 def _combine_vessels_weighted(wsp, num_vessels, basil_output, method="weightedperf"):
     """
@@ -419,10 +417,10 @@ def _combine_vessels_weighted(wsp, num_vessels, basil_output, method="weightedpe
                 have_output = True
 
         if have_output:
-            all_vessel_step_wsp = getattr(wsp.basil, step_name, None)
+            all_vessel_step_wsp = getattr(wsp.basil_allvessels, step_name, None)
             if all_vessel_step_wsp is None:
-                wsp.basil.sub(step_name)
-                all_vessel_step_wsp = getattr(wsp.basil, step_name)
+                wsp.basil_allvessels.sub(step_name)
+                all_vessel_step_wsp = getattr(wsp.basil_allvessels, step_name)
 
             if method == "singleperf":
                 # This selects the arrival time from a single vessel with highest perfusion
@@ -434,7 +432,7 @@ def _combine_vessels_weighted(wsp, num_vessels, basil_output, method="weightedpe
             elif method == "weightedperf":
                 # Tests the arrival time from a weighted average of vessels weighted by perfusion. Note that
                 # we need to protect against divide by zero
-                total_perf = wsp.basil.finalstep.mean_ftiss.data
+                total_perf = wsp.basil_allvessels.finalstep.mean_ftiss.data
                 total_perf[total_perf <= 0] = 1
                 all_vessel_img = np.nan_to_num(np.sum(vessel_perf * vessel_output, axis=-1) / total_perf)
             #elif combine_method == "weightedprob":
@@ -446,35 +444,32 @@ def _combine_vessels_weighted(wsp, num_vessels, basil_output, method="weightedpe
         if step_wsp is None:
             break
         step += 1
-    if wsp.basil.finalstep is None:
-        wsp.basil.finalstep = all_vessel_step_wsp
+    if wsp.basil_allvessels.finalstep is None:
+        wsp.basil_allvessels.finalstep = all_vessel_step_wsp
 
 def _combine_vessels(wsp, num_vessels):
     """
     Generate combined output for all vessels
     """
     wsp.log.write("\nGenerating combined images for all vessels\n\n")
-    wsp.sub("basil")
+    wsp.sub("basil_allvessels")
 
     # Generate combined perfusion and aCBV maps over all vessels
     for otype in ("", "mean_", "std_"):
         for oname in ("ftiss", "fblood", "modelfit", "delttiss", "deltblood"):
             basil_output = "%s%s" % (otype, oname)
-            if not oname.startswith("delt") and otype  in ("", "mean_"):
-                _combine_vessels_sum(wsp, num_vessels, basil_output)                
+            if not oname.startswith("delt") and otype in ("", "mean_"):
+                _combine_vessels_sum(wsp, num_vessels, basil_output)             
             else:
                 _combine_vessels_weighted(wsp, num_vessels, basil_output, method=wsp.ifnone("arrival_combine", "weightedperf"))
 
     # All Basil-type directories must save the analysis mask
-    wsp.basil.analysis_mask = wsp.basil_vessel1.analysis_mask
+    wsp.basil_allvessels.analysis_mask = wsp.basil_vessel1.analysis_mask
 
     # Re-do registration using PWI as reference
-    reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False, use_quantification_wsp=wsp.basil)
+    reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False, use_quantification_wsp=wsp.basil_allvessels)
 
-    #report = Report("Combined output for all vessels")
-    #oxford_asl.output_report(wsp.output.all_vessels.native, report=report)
-    #wsp.report.add("all_vessels", report)
-    wsp.quantify_wsps.append("basil")
+    wsp.quantify_wsps.append("basil_allvessels")
 
 def run(wsp):
     """

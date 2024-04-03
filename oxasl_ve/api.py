@@ -3,7 +3,7 @@ Python interface to VEASLC
 
 Library for processing vessel-encoded ASL data
 
-Copyright (c) 2008-2013 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import math
 import traceback

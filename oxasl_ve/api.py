@@ -3,7 +3,7 @@ Python interface to VEASLC
 
 Library for processing vessel-encoded ASL data
 
-Copyright (c) 2008-2013 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import math
 import traceback
@@ -219,7 +219,7 @@ def generate_mask(data, imlist, frac=0.5):
     tag_idx, ctl_idx = imlist.index(-1), imlist.index(0)
     diffdata = np.abs(data[..., tag_idx] - data[..., ctl_idx])
     thresh = np.percentile(diffdata, 99) * (1-frac)
-    return (diffdata > thresh).astype(np.int)
+    return (diffdata > thresh).astype(np.int32)
 
 def _autogen_mask(wsp):
     maskdata = generate_mask(wsp.asldata.data, wsp.imlist, wsp.ifnone("infer_mask_frac", 0.5))
@@ -519,6 +519,7 @@ class VeaslOptions(OptionCategory):
         g.add_option("--rot-std", help="Prior standard deviation for rotation angle (degrees) if using rigid body inference", type="float", default=1.2)
         g.add_option("--v-mean", help="Prior mean flow velocity if using --infer-v", type="float", default=0.3)
         g.add_option("--v-std", help="Prior standard deviation for flow velocity if using --infer-v", type="float", default=0.01)
+        g.add_option("--infer-mask", help="Inference mask", type="image")
         g.add_option("--infer-mask-frac", help="Fraction of 99th percentile to use when generating inference mask", type="float", default=0.5)
         g.add_option("--modmat", help="Modulation matrix file")
         g.add_option("--encdef", help="Encoding definition file", type="matrix")
